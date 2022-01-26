@@ -56,6 +56,7 @@ type IP struct {
 type Entry struct {
     Host    string
     IPs     []IP
+    CNAME   string
 }
 
 func doWork(work chan string, wg *sync.WaitGroup) {
@@ -78,6 +79,12 @@ func doWork(work chan string, wg *sync.WaitGroup) {
             Host: host,
             IPs: make([]IP, 0),
         }
+
+        CNAME, err := r.LookupCNAME(context.Background(), host)
+        if err != nil {
+            // fmt.Fprintf(os.Stderr, "Could not get CNAME: %v\n", err)
+        }
+        entry.CNAME = CNAME
 
         ips, err := r.LookupIP(context.Background(), "ip4", host)
         if err != nil {
