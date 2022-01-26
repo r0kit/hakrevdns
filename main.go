@@ -3,6 +3,7 @@ package main
 import (
     "bufio"
     "context"
+    "encoding/json"
     flags "github.com/jessevdk/go-flags"
     "fmt"
     "net"
@@ -46,6 +47,17 @@ func main() {
         wg.Wait()
 }
 
+
+type IP struct {
+    Address string
+    RDNS    string
+}
+
+type Entry struct {
+    Host    string
+    IPs     []IP
+}
+
 func doWork(work chan string, wg *sync.WaitGroup) {
     defer wg.Done()
     var r *net.Resolver
@@ -60,18 +72,45 @@ func doWork(work chan string, wg *sync.WaitGroup) {
             }
     }
 
-    for ip := range work {
-        addr, err := r.LookupAddr(context.Background(), ip)
-        if err != nil {
-                continue
+    // Resolve hostname first
+    for host := range work {
+        entry := Entry {
+            Host: host,
+            IPs: make([]IP, 0),
         }
 
-        for _, a := range addr {
-		if opts.Domain {
-			fmt.Println(strings.TrimRight(a, "."))
-		} else {
-                	fmt.Println(ip, "\t",a)
-		}
+        ips, err := r.LookupIP(context.Background(), "ip4", host)
+        if err != nil {
+            // fmt.Fprintf(os.Stderr, "Could not get IPs: %v\n", err)
+            continue
         }
+
+        for _, ip := range ips {
+
+            // Do revdns
+            addr, err := r.LookupAddr(context.Background(), ip.String())
+            if err != nil {
+                    continue
+            }
+
+            var rdns string
+            for _, a := range addr {
+                    if opts.Domain {
+                            rdns = strings.TrimRight(a, ".")
+                    } else {
+                            rdns = a
+                    }
+            }
+
+            resolved := IP {
+                Address: ip.String(),
+                RDNS: rdns,
+            }
+            entry.IPs = append(entry.IPs, resolved)
+        }
+
+
+        result, _ := json.Marshal(entry)
+        fmt.Printf("%s\n", string(result))
     }
 }
